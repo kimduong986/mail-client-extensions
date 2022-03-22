@@ -14,6 +14,8 @@ import {OdooTheme} from "../../../../utils/Themes";
 import "./ContactPage.css";
 import Lead from "../../../../classes/Lead";
 import HelpdeskTicket from "../../../../classes/HelpdeskTicket";
+import TasksSection from "../../Project/TasksSection/TasksSection";
+import Task from "../../../../classes/Task";
 
 
 type ContactPageProps = {
@@ -54,9 +56,15 @@ class ContactPage extends React.Component<ContactPageProps, ContactPageState> {
             {
                 partner.leads = parsed.result.leads.map(lead_json => Lead.fromJSON(lead_json));
             }
+            if (parsed.result.tasks) {
+                partner.tasks = parsed.result.tasks.map(task_json => Task.fromJSON(task_json));
+            }
             if (parsed.result.tickets)
             {
                 partner.tickets = parsed.result.tickets.map(ticket_json => HelpdeskTicket.fromJSON(ticket_json));
+            }
+            if (parsed.result.user_companies) {
+                this.context.setUserCompanies(parsed.result.user_companies);
             }
             this.setState({partner: partner, isLoading: false});
             if (parsed.result.partner['enrichment_info'])
@@ -66,7 +74,7 @@ class ContactPage extends React.Component<ContactPageProps, ContactPageState> {
                 if (enrichmentInfo.type != EnrichmentInfoType.NoData)
                     this.context.showTopBarMessage(enrichmentInfo);
             }
-            this.onPartnerChanged(partner);
+            this.propagatePartnerInfoChange(partner);
         }).catch(error => {
             this.context.showHttpErrorMessage(error);
             this.setState({isLoading: false});
@@ -78,14 +86,18 @@ class ContactPage extends React.Component<ContactPageProps, ContactPageState> {
         return (this.props.partner.leads != undefined);
     }
 
+    private isProjectInstalled = ():boolean => {
+        return (this.props.partner.tasks != undefined);
+    }
+
     private isHelpdeskInstalled =():boolean => {
         return (this.props.partner.tickets != undefined);
     }
 
-    private onPartnerChanged = (partner: Partner) => {
+    private propagatePartnerInfoChange = (partner: Partner) => {
+        this.setState({partner: partner});
         this.props.onPartnerChanged(partner);
     }
-
 
     componentDidMount() {
         if (this.props.loadPartner && this.context.isConnected())
@@ -114,6 +126,11 @@ class ContactPage extends React.Component<ContactPageProps, ContactPageState> {
                 leadsList = (<div style={{marginTop: "16px"}}><LeadsSection partner={this.state.partner}/></div>);
             }
 
+            let tasksList = null;
+            if (this.isProjectInstalled()) {
+                tasksList = (<div style={{marginTop: "16px"}}><TasksSection partner={this.state.partner}/></div>);
+            }
+
             let ticketsList = null;
             if (this.isHelpdeskInstalled())
             {
@@ -124,11 +141,12 @@ class ContactPage extends React.Component<ContactPageProps, ContactPageState> {
 
             return (
                 <>
-                    <ContactSection partner={this.state.partner} onPartnerInfoChanged={this.onPartnerChanged}/>
+                    <ContactSection partner={this.state.partner}/>
                     {leadsList}
+                    {tasksList}
                     {ticketsList}
                     <div style={{marginTop: "16px"}}>
-                        <CompanySection partner={this.state.partner} onPartnerInfoChanged={this.onPartnerChanged}
+                        <CompanySection partner={this.state.partner} onPartnerInfoChanged={this.propagatePartnerInfoChange}
                                         hideCollapseButton={hideCollapseButton}/>
                     </div>
                 </>

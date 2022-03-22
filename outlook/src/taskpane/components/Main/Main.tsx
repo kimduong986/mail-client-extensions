@@ -8,7 +8,7 @@ import api from "../../api";
 import PartnerData from "../../../classes/Partner";
 import Partner from "../../../classes/Partner";
 import CompanyCache from "../../../classes/CompanyCache";
-import CompanyData from "../../../classes/Company";
+import CompanyData, {EnrichmentStatus} from "../../../classes/Company";
 
 import AppContext from '../AppContext';
 import ContactPage from "../Contact/ContactPage/ContactPage";
@@ -18,11 +18,13 @@ import {faArrowLeft, faPlusCircle, faRedoAlt, faSearch} from "@fortawesome/free-
 import EnrichmentInfo, {EnrichmentInfoType} from "../../../classes/EnrichmentInfo";
 import Progress from "../GrayOverlay";
 import {TooltipHost} from "office-ui-fabric-react";
+import {_t, saveTranslations, translationsExpired} from "../../../utils/Translator";
 
 
 type MainState = {
     matchedPartners: Partner[],
-    loading: boolean,
+    partnersLoading: boolean,
+    translationsLoading: boolean,
     searchQuery: string,
     selectedPartner: Partner,
     isSearching: boolean,
@@ -53,23 +55,33 @@ class Main extends React.Component<{}, MainState> {
             searchQuery: undefined,
             selectedPartner: undefined,
             isSearching: false,
-            loading: true,
+            partnersLoading: true,
+            translationsLoading: true,
             backStack: [],
             poppedElement: undefined,
             contactKey: Math.random(),
             loadPartner: true
         };
 
-        this.companyCache = new CompanyCache(2, 200, 25);
+        this.companyCache = new CompanyCache(2, 200, 0.25);
     }
 
     componentDidMount() {
         if (this.context.isConnected())
         {
             this.getAllMatchedPartnersRequest();
+            if (translationsExpired())
+            {
+                this.getTranslations();
+            }
+            else
+            {
+                this.setState({translationsLoading: false});
+            }
         }
         else
         {
+            this.setState({translationsLoading: false});
             this.getPartnerDisconnectedRequest();
         }
     }
@@ -82,7 +94,7 @@ class Main extends React.Component<{}, MainState> {
             return;
         }
 
-        this.setState({loading: true});
+        this.setState({partnersLoading: true});
 
         const addPartnerRequest = sendHttpRequest(HttpVerb.POST, api.baseURL + api.createPartner,
             ContentType.Json, this.context.getConnectionToken(), {
@@ -97,11 +109,11 @@ class Main extends React.Component<{}, MainState> {
                 const newId = parsed.result.id;
                 let partner = this.state.selectedPartner;
                 partner.id = newId;
-                this.setState({selectedPartner: partner, loading: false});
+                this.setState({selectedPartner: partner, partnersLoading: false});
                 this.onRefreshPartnerClick();
             }
         ).catch(error => {
-            this.setState({loading: false});
+            this.setState({partnersLoading: false});
             this.context.showHttpErrorMessage(error);
         });
 
@@ -132,7 +144,7 @@ class Main extends React.Component<{}, MainState> {
             );
             if (partners.length > 0)
             {
-                partners = Partner.sortBestMatches(email, name, partners);
+                partners = Partner.sortBestMatches(email, displayName, partners);
                 this.setState({matchedPartners: partners, selectedPartner: partners[0]});
             }
             else
@@ -142,10 +154,10 @@ class Main extends React.Component<{}, MainState> {
                 partners.push(newPartner);
                 this.setState({matchedPartners: partners, selectedPartner: partners[0]});
             }
-            this.setState({loading: false});
+            this.setState({partnersLoading: false});
         }).catch((error) => {
             this.context.showHttpErrorMessage(error);
-            this.setState({loading: false});
+            this.setState({partnersLoading: false});
             console.log(error);
         });
     }
@@ -161,6 +173,20 @@ class Main extends React.Component<{}, MainState> {
         return {email: email, displayName: displayName}
     }
 
+    private getTranslations = () => {
+        this.setState({translationsLoading: true});
+        sendHttpRequest(HttpVerb.POST, api.baseURL + api.getTranslations, ContentType.Json,
+            this.context.getConnectionToken(), {
+                plugin: "outlook"
+            }, true).promise.then((response) => {
+            const parsed = JSON.parse(response);
+            let translations = parsed.result;
+            saveTranslations(translations);
+        }).finally(() => {
+            this.setState({translationsLoading: false});
+        });
+    }
+
     private getPartnerDisconnectedRequest = () => {
         Office.context.mailbox.getUserIdentityTokenAsync(idTokenResult => {
             let email = this.getEmailInfo().email;
@@ -173,7 +199,8 @@ class Main extends React.Component<{}, MainState> {
             if (cachedCompany)
             {
                 partner.company = cachedCompany;
-                this.setState({matchedPartners: [partner], selectedPartner: partner});
+                partner.company.enrichmentStatus = EnrichmentStatus.enriched;
+                this.setState({matchedPartners: [partner], selectedPartner: partner, partnersLoading: false});
             }
             else
             {
@@ -193,17 +220,19 @@ class Main extends React.Component<{}, MainState> {
                         if (enrichmentInfo.type != EnrichmentInfoType.NoData)
                             this.context.showTopBarMessage(enrichmentInfo);
                         partner.company = CompanyData.getEmptyCompany();
+                        partner.company.enrichmentStatus = EnrichmentStatus.enrichmentEmpty;
                         this.setState({matchedPartners: [partner], selectedPartner: partner,
-                        loading: false});
+                        partnersLoading: false});
                         return;
                     }
                     partner.company = CompanyData.fromRevealJSON(parsed.result);
                     this.companyCache.add(partner.company);
+                    partner.company.enrichmentStatus = EnrichmentStatus.enriched;
                     this.setState({matchedPartners: [partner], selectedPartner: partner
-                        , loading: false});
+                        , partnersLoading: false});
                 }).catch(error => {
                     this.context.showHttpErrorMessage(error);
-                    this.setState({loading: false});
+                    this.setState({partnersLoading: false});
                 });
             }
         });
@@ -271,7 +300,7 @@ class Main extends React.Component<{}, MainState> {
 
     render() {
 
-        if (this.state.loading)
+        if (this.state.partnersLoading || this.state.translationsLoading)
         {
             return (<Progress />);
         }
@@ -296,7 +325,7 @@ class Main extends React.Component<{}, MainState> {
             topBarContent = (<div style={broadCampStyle}>
                     {backButton}
                     <div>
-                        Search In Database
+                        {_t("Search In Database")}
                     </div>
                     <span/>
                 </div>
@@ -310,7 +339,7 @@ class Main extends React.Component<{}, MainState> {
             if (this.context.isConnected())
             {
                 refrechPartnerButton = (
-                    <TooltipHost content="Refresh Contact">
+                    <TooltipHost content={_t("Refresh Contact")}>
                         <div className="odoo-muted-button" onClick={this.onRefreshPartnerClick} style={{border: "none"}}>
                             <FontAwesomeIcon icon={faRedoAlt} style={{cursor: "pointer"}} />
                         </div>
@@ -320,7 +349,7 @@ class Main extends React.Component<{}, MainState> {
             if (this.state.selectedPartner && !this.state.selectedPartner.isAddedToDatabase())
             {
                 addPartnerButton = (
-                    <TooltipHost content="Add Contact To Database">
+                    <TooltipHost content={_t("Add Contact To Database")}>
                         <div className="odoo-muted-button" onClick={this.addPartnerToDbRequest} style={{border: "none"}}>
                             <FontAwesomeIcon icon={faPlusCircle} style={{cursor: "pointer"}} />
                         </div>
@@ -332,10 +361,10 @@ class Main extends React.Component<{}, MainState> {
                 <div style={broadCampStyle}>
                     {backButton}
                     <div>
-                        Contact Details
+                        {_t("Contact Details")}
                     </div>
                     <div style={{display: "flex"}}>
-                        <TooltipHost content="Search in Odoo">
+                        <TooltipHost content={_t("Search In Odoo")}>
                             <div className="odoo-muted-button" onClick={this.onSearchClick} style={{border: "none"}}>
                                 <FontAwesomeIcon icon={faSearch} style={{cursor: "pointer"}} />
                             </div>
@@ -357,7 +386,7 @@ class Main extends React.Component<{}, MainState> {
                                     onClick={() => this.context.navigation.goToLogin()}>Login</div>;
         if (this.context.isConnected()){
             connectionButton = <div className='link-like-button connect-button'
-                                    onClick={() =>{this.context.disconnect();this.context.navigation.goToLogin();}}>Logout</div>
+                                    onClick={() =>{this.context.disconnect();this.context.navigation.goToLogin();}}>{_t("Logout")}</div>
         }
 
 

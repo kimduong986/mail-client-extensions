@@ -4,6 +4,7 @@ import AppContext from '../../../AppContext';
 import Partner from "../../../../../classes/Partner";
 import './ContactListItem.css';
 import Logger from "../../../Log/Logger";
+import { _t } from "../../../../../utils/Translator";
 
 type CustomContactListItemProps = {
     partner: Partner;
@@ -38,7 +39,8 @@ class ContactListItem extends React.Component<CustomContactListItemProps, {} > {
             facebook: undefined,
             crunchbase: undefined,
             linkedin: undefined,
-            isBig: !this.context.isConnected() || (!this.props.partner.isAddedToDatabase())
+            isBig: !this.context.isConnected() || (!this.props.partner.isAddedToDatabase()),
+            isCompany: this.props.partner.isCompany,
         } as ProfileCardProps;
 
         let addButton = null;
@@ -46,7 +48,7 @@ class ContactListItem extends React.Component<CustomContactListItemProps, {} > {
 
         if (this.props.partner.isAddedToDatabase())
         {
-            logButton = (<Logger resId={this.props.partner.id} model="res.partner" tooltipContent="Log Email Into Contact"/>);
+            logButton = (<Logger resId={this.props.partner.id} model="res.partner" tooltipContent={_t("Log Email Into Contact")}/>);
         }
 
         let classNames = "contact-list-item-container";

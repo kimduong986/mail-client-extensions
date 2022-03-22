@@ -2,6 +2,7 @@ import Company from './Company';
 import EnrichmentInfo from './EnrichmentInfo';
 import Lead from "./Lead";
 import HelpdeskTicket from "./HelpdeskTicket";
+import Task from './Task';
 
 
 /***
@@ -21,7 +22,9 @@ class Partner {
     enrichmentInfo: EnrichmentInfo;
     created: boolean;
     leads?: Lead[];
+    tasks?: Task[];
     tickets?: HelpdeskTicket[];
+    isCompany: boolean;
 
     constructor() {
         this.id = ID_PARTNER_NOT_FROM_DATABASE;
@@ -34,6 +37,7 @@ class Partner {
         this.image = "";
         this.enrichmentInfo = new EnrichmentInfo();
         this.created = false;
+        this.isCompany = false;
     }
 
 
@@ -56,6 +60,7 @@ class Partner {
         const partner = Object.assign(new Partner(), o);
         partner.company = Company.fromJSON(o['company']);
         partner.enrichmentInfo = EnrichmentInfo.fromJSON(o['enrichment_info']);
+        partner.isCompany = o['is_company'];
         return partner;
     }
 

@@ -5,6 +5,7 @@ import AppContext from './AppContext';
 import EnrichmentInfo, {EnrichmentInfoType} from "../../classes/EnrichmentInfo";
 import {IIconProps, Link, MessageBar, MessageBarType} from "office-ui-fabric-react";
 import Progress from "./GrayOverlay";
+import { _t } from "../../utils/Translator";
 
 enum Page {
     Login,
@@ -22,6 +23,7 @@ export interface AppState {
     EnrichmentInfo: EnrichmentInfo;
     showPartnerCreatedMessage: boolean;
     showEnrichmentInfoMessage: boolean;
+    userCompanies: number[];
     loginErrorMessage: string;
     navigation: {
         goToLogin: () => void,
@@ -30,9 +32,11 @@ export interface AppState {
     connect: (token) => void,
     disconnect: () => void,
     getConnectionToken: () => void,
+    getUserCompaniesString: () => string,
     isConnected: () => Boolean,
     cancelRequests: () => void,
     addRequestCanceller: (canceller: () => void) => void,
+    setUserCompanies: (userCompanies: number[]) => void,
     showTopBarMessage: (enrichmentInfo?: EnrichmentInfo) => void,
     showHttpErrorMessage: (error) => void
 }
@@ -49,9 +53,9 @@ export default class App extends React.Component<AppProps, AppState> {
             EnrichmentInfo: new EnrichmentInfo(),
             showPartnerCreatedMessage: false,
             showEnrichmentInfoMessage: false,
+            userCompanies: [],
             pageDisplayed: Page.Main,
             loginErrorMessage: "",
-            
             navigation: {
                 goToLogin: this.goToLogin,
                 goToMain: this.goToMain
@@ -61,9 +65,18 @@ export default class App extends React.Component<AppProps, AppState> {
             },
             disconnect: () => {
                 localStorage.removeItem('odooConnectionToken');
+                localStorage.removeItem('translations');
+                localStorage.removeItem('translationsTimestamp');
             },
             getConnectionToken: () => {
                 return 'Bearer ' + localStorage.getItem('odooConnectionToken');
+            },
+            getUserCompaniesString: () => {
+                if (this.state.userCompanies.length == 0) {
+                    return '';
+                } else {
+                    return `&cids=${this.state.userCompanies.sort().join(',')}`;
+                }
             },
             isConnected: () => {
                 return !!localStorage.getItem('odooConnectionToken');
@@ -77,6 +90,10 @@ export default class App extends React.Component<AppProps, AppState> {
             },
             addRequestCanceller: (canceller: () => void) => {
                 this.requestCancellers.push(canceller);
+            },
+
+            setUserCompanies: (companies: number[]) => {
+                this.setState({userCompanies: companies});
             },
 
             showTopBarMessage: (enrichmentInfo) => {
@@ -121,16 +138,19 @@ export default class App extends React.Component<AppProps, AppState> {
         };
         let bars = [];
         if (this.state.showPartnerCreatedMessage) {
-            bars.push(<MessageBar messageBarType={MessageBarType.success} onDismiss={this.hidePartnerCreatedMessage}>Contact created</MessageBar>);
+            bars.push(<MessageBar messageBarType={MessageBarType.success} onDismiss={this.hidePartnerCreatedMessage}>{_t("Contact created")}</MessageBar>);
         }
         if (this.state.showEnrichmentInfoMessage) {
             switch (type) {
                 case EnrichmentInfoType.CompanyCreated:
-                    bars.push(<MessageBar messageBarType={MessageBarType.success} onDismiss={this.hideEnrichmentInfoMessage}>Company created</MessageBar>);
+                    bars.push(<MessageBar messageBarType={MessageBarType.success} onDismiss={this.hideEnrichmentInfoMessage}>{_t("Company created")}</MessageBar>);
+                    break;
+                case EnrichmentInfoType.CompanyUpdated:
+                    bars.push(<MessageBar messageBarType={MessageBarType.success} onDismiss={this.hideEnrichmentInfoMessage}>{_t("Company updated")}</MessageBar>);
                     break;
                 case EnrichmentInfoType.NoData:
                 case EnrichmentInfoType.NotConnected_NoData:
-                    bars.push(<MessageBar messageBarType={MessageBarType.info} onDismiss={this.hideEnrichmentInfoMessage}>{message}</MessageBar>);
+                    bars.push(<MessageBar messageBarType={MessageBarType.warning} onDismiss={this.hideEnrichmentInfoMessage}>{message}</MessageBar>);
                     break;
                 case EnrichmentInfoType.InsufficientCredit:
 
@@ -138,17 +158,25 @@ export default class App extends React.Component<AppProps, AppState> {
                         {message}
                         <br/>
                         <Link href={info} target="_blank">
-                            Buy More
+                            {_t("Buy More")}
                         </Link>
                     </MessageBar>);
+                    break;
+                case EnrichmentInfoType.ConnectionError:
+                    bars.push(<>
+                        <MessageBar messageBarType={MessageBarType.error} messageBarIconProps={warningIcon} onDismiss={this.hideEnrichmentInfoMessage}>
+                            {message}
+                            <div className="link-like-button" onClick={() =>{this.goToLogin()}}>{_t("Login")}</div>
+                        </MessageBar>
+                    </>);
                     break;
                 case EnrichmentInfoType.EnrichContactWithNoEmail:
                 case EnrichmentInfoType.NotConnected_InsufficientCredit:
                 case EnrichmentInfoType.NotConnected_InternalError:
                 case EnrichmentInfoType.Other:
-                case EnrichmentInfoType.ConnectionError:
+                case EnrichmentInfoType.CouldNotGetTranslations:
                     bars.push(<MessageBar messageBarType={MessageBarType.error} messageBarIconProps={warningIcon} onDismiss={this.hideEnrichmentInfoMessage}>{message}</MessageBar>);
-                    break;
+                        break;
             }
         }
         return bars;
